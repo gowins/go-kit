@@ -25,10 +25,10 @@ type poolManager struct {
 	sync.Mutex
 
 	// 管理当前可选的连接
-	indexes []*poolConn
+	indexes []*ClientConn
 	// 真实可用的连接
-	data map[*poolConn]struct{}
-	// 真实 pool 的大小，也就是最大池子长度
+	data map[*ClientConn]struct{}
+	// 真实 Pool 的大小，也就是最大池子长度
 	size int
 	// 连接有效期
 	ttl int64
@@ -52,8 +52,8 @@ const (
 func newManager(addr string, size int, ttl int64) *poolManager {
 	tickerCount := size
 	manager := &poolManager{
-		indexes: make([]*poolConn, 0, 0),
-		data:    make(map[*poolConn]struct{}),
+		indexes: make([]*ClientConn, 0, 0),
+		data:    make(map[*ClientConn]struct{}),
 		size:    size,
 		ttl:     ttl,
 		addr:    addr,
@@ -63,7 +63,7 @@ func newManager(addr string, size int, ttl int64) *poolManager {
 	return manager
 }
 
-func (m *poolManager) isValid(conn *poolConn) connState {
+func (m *poolManager) isValid(conn *ClientConn) connState {
 	// 无效 1
 	if conn == nil {
 		return invalid
@@ -106,7 +106,7 @@ func (m *poolManager) isValid(conn *poolConn) connState {
 	return invalid
 }
 
-func (m *poolManager) get(opts ...grpc.DialOption) (*poolConn, error) {
+func (m *poolManager) get(opts ...grpc.DialOption) (*ClientConn, error) {
 	tracer.AddTrace("start finding connection: ", m.addr)
 	conn, found := m.tryFindOne()
 	if found {
@@ -133,12 +133,12 @@ func (m *poolManager) get(opts ...grpc.DialOption) (*poolConn, error) {
 }
 
 // tryFindOne 偿试找一个可用的连接
-func (m *poolManager) tryFindOne() (*poolConn, bool) {
+func (m *poolManager) tryFindOne() (*ClientConn, bool) {
 	m.Lock()
 	defer m.Unlock()
 	m.updatedAt = time.Now() // 更新最后使用时间
 
-	var nextRound []*poolConn // 进入下一轮
+	var nextRound []*ClientConn // 进入下一轮
 	for idx, conn := range m.indexes {
 		// 直接移除，下一个请求直接不再选择
 		// 标识可关闭
@@ -173,7 +173,7 @@ func (m *poolManager) tryFindOne() (*poolConn, bool) {
 	return nil, false
 }
 
-func (m *poolManager) create(opts ...grpc.DialOption) (*poolConn, error) {
+func (m *poolManager) create(opts ...grpc.DialOption) (*ClientConn, error) {
 	// 如果从 manager 中找不到可用的连接时，新建一个连接
 	cc, err := grpc.Dial(m.addr, WithDefaultDialOptions(opts...)...)
 	if err != nil {
@@ -181,7 +181,7 @@ func (m *poolManager) create(opts ...grpc.DialOption) (*poolConn, error) {
 		return nil, err
 	}
 
-	conn := &poolConn{
+	conn := &ClientConn{
 		ClientConn: cc,
 		newCreated: true,
 		created:    m.backoff(cc), // 打乱时长
@@ -203,7 +203,7 @@ func (m *poolManager) backoff(cc *grpc.ClientConn) time.Time {
 	return time.Now().Add(time.Second * time.Duration(p))
 }
 
-func (m *poolManager) put(conn *poolConn, err error) {
+func (m *poolManager) put(conn *ClientConn, err error) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -253,7 +253,7 @@ func (m *poolManager) put(conn *poolConn, err error) {
 }
 
 // tryClose 偿试关闭可关闭的连接
-func (m *poolManager) tryClose(conn *poolConn) {
+func (m *poolManager) tryClose(conn *ClientConn) {
 	tracer.AddTrace("close client connection:", conn)
 
 	// 1. 从连接管理中移除，不让下一个选中

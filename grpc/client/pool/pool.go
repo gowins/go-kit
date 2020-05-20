@@ -12,7 +12,7 @@ const (
 	cleanupInterval = time.Minute * 10
 )
 
-type pool struct {
+type Pool struct {
 	size int
 	ttl  int64
 
@@ -20,7 +20,7 @@ type pool struct {
 	conns map[string]*poolManager
 }
 
-type poolConn struct {
+type ClientConn struct {
 	*grpc.ClientConn
 
 	// 创建状态
@@ -34,8 +34,8 @@ type poolConn struct {
 	closable bool
 }
 
-func newPool(size int, ttl time.Duration) *pool {
-	pool := &pool{
+func NewPool(size int, ttl time.Duration) *Pool {
+	pool := &Pool{
 		size:  size,
 		ttl:   int64(ttl.Seconds()),
 		conns: make(map[string]*poolManager),
@@ -46,16 +46,16 @@ func newPool(size int, ttl time.Duration) *pool {
 	return pool
 }
 
-func (p *pool) getConn(addr string, opts ...grpc.DialOption) (*poolConn, error) {
+func (p *Pool) GetConn(addr string, opts ...grpc.DialOption) (*ClientConn, error) {
 	return p.getManager(addr).get(opts...)
 }
 
-func (p *pool) release(addr string, conn *poolConn, err error) {
+func (p *Pool) Release(addr string, conn *ClientConn, err error) {
 	// otherwise put it back for reuse
 	p.getManager(addr).put(conn, err)
 }
 
-func (p *pool) getManager(addr string) *poolManager {
+func (p *Pool) getManager(addr string) *poolManager {
 	p.Lock()
 	defer p.Unlock()
 
@@ -68,7 +68,7 @@ func (p *pool) getManager(addr string) *poolManager {
 	return manager
 }
 
-func (p *pool) cleanup() {
+func (p *Pool) cleanup() {
 	timer := time.NewTicker(cleanupInterval)
 	for range timer.C {
 		cleans := p.findCanCleanups()
@@ -83,7 +83,7 @@ func (p *pool) cleanup() {
 	}
 }
 
-func (p *pool) findCanCleanups() map[string]*poolManager {
+func (p *Pool) findCanCleanups() map[string]*poolManager {
 	p.Lock()
 	defer p.Unlock()
 
