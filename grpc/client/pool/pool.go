@@ -10,6 +10,8 @@ import (
 const (
 	// 偿试清理间隔
 	cleanupInterval = time.Minute * 10
+	minTTL = 1 // second
+	minPoolSize = 1
 )
 
 type Pool struct {
@@ -37,11 +39,11 @@ type ClientConn struct {
 func NewPool(size int, ttl time.Duration) *Pool {
 	ttls := int64(ttl.Seconds())
 	if ttls < 0 {
-		ttls = 1
+		ttls = minTTL
 	}
 
 	if size < 0 {
-		size = 1
+		size = minPoolSize
 	}
 
 	pool := &Pool{
