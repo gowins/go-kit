@@ -46,6 +46,16 @@ func NewPool(size int, ttl time.Duration) *Pool {
 	return pool
 }
 
+// Init modify the pool configurations.
+// This configurations will represent on the managers create after this action.
+func (p *Pool) Init(size int, ttl time.Duration) {
+	p.Lock()
+	defer p.Unlock()
+
+	p.size = size
+	p.ttl = int64(ttl.Seconds())
+}
+
 func (p *Pool) GetConn(addr string, opts ...grpc.DialOption) (*ClientConn, error) {
 	return p.getManager(addr).get(opts...)
 }
