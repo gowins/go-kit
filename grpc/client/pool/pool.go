@@ -35,9 +35,18 @@ type ClientConn struct {
 }
 
 func NewPool(size int, ttl time.Duration) *Pool {
+	ttls := int64(ttl.Seconds())
+	if ttls < 0 {
+		ttls = 1
+	}
+
+	if size < 0 {
+		size = 1
+	}
+
 	pool := &Pool{
 		size:  size,
-		ttl:   int64(ttl.Seconds()),
+		ttl:   ttls,
 		conns: make(map[string]*poolManager),
 	}
 
@@ -52,8 +61,14 @@ func (p *Pool) Init(size int, ttl time.Duration) {
 	p.Lock()
 	defer p.Unlock()
 
-	p.size = size
-	p.ttl = int64(ttl.Seconds())
+	ttls := int64(ttl.Seconds())
+	if ttls > 0 && ttls != p.ttl {
+		p.ttl = ttls
+	}
+
+	if size > 0 && size != p.size {
+		p.size = size
+	}
 }
 
 func (p *Pool) GetConn(addr string, opts ...grpc.DialOption) (*ClientConn, error) {
